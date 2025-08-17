@@ -3,23 +3,16 @@ using UnityEngine.UI;
 
 public class Mediator : MonoBehaviour
 {
-    private ButtonController buttonController;
-    private TimerController timerController;
+    [SerializeField] private ButtonController buttonController;
+    [SerializeField] private TransformChanger transformChanger;
+    [SerializeField] private Timer timer;
 
-    [SerializeField] private float intervalBetweenRounds = 1.0f;
-    [SerializeField] private float highlightDuration = 1.25f;
     private Button currentHighlightedButton;
     private bool isHighlightActive;
 
-    void Awake()
-    {
-        buttonController = FindAnyObjectByType<ButtonController>();
-        timerController = FindAnyObjectByType<TimerController>();
-    }
-
     void Start()
     {
-        timerController.StartInterval(intervalBetweenRounds);
+        timer.StartInterval();
     }
 
     private void HandleIntervalElapsed()
@@ -27,7 +20,7 @@ public class Mediator : MonoBehaviour
         currentHighlightedButton = buttonController.GetRandomButton();
         isHighlightActive = true;
         buttonController.SetButtonHighlight(currentHighlightedButton, true);
-        timerController.StartHighlight(highlightDuration);
+        timer.StartHighlight();
     }
 
     private void HandleButtonClicked(Button clickedButton)
@@ -37,14 +30,17 @@ public class Mediator : MonoBehaviour
             if (clickedButton == currentHighlightedButton)
             {
                 OnSuccessWhileHighlighted();
+                transformChanger.TriggerTransformChangedEvent(false);
             }
             else
             {
                 OnFailWrongButton();
+                transformChanger.TriggerTransformChangedEvent(true);
             }
             EndRoundAndQueueNext();
             return;
         }
+        transformChanger.TriggerTransformChangedEvent(true);
         OnFailTooLate();
         EndRoundAndQueueNext();
     }
@@ -55,8 +51,8 @@ public class Mediator : MonoBehaviour
         buttonController.ClearHighlight();
         currentHighlightedButton = null;
 
-        timerController.StopHighlight();
-        timerController.StartInterval(intervalBetweenRounds);
+        timer.StopAllTimers();
+        timer.StartInterval();
     }
 
     private void HandleHighlightExpired()
@@ -64,18 +60,19 @@ public class Mediator : MonoBehaviour
         if (isHighlightActive)
         {
             OnFailTooLate();
+            transformChanger.TriggerTransformChangedEvent(true);
         }
         EndRoundAndQueueNext();
     }
 
     private void OnFailTooLate()
     {
-        Debug.Log("You are late to press highlighted button");
+        Debug.Log("Too late, getting bigger");
     }
 
     private void OnFailWrongButton()
     {
-        Debug.Log("You pressed wrong button");
+        Debug.Log("Wrong button, getting bigger");
     }
 
     private void OnSuccessWhileHighlighted()
@@ -86,14 +83,14 @@ public class Mediator : MonoBehaviour
     void OnEnable()
     {
         buttonController.OnButtonClicked += HandleButtonClicked;
-        timerController.OnIntervalElapsed += HandleIntervalElapsed;
-        timerController.OnHighlightedExpired += HandleHighlightExpired;
+        timer.OnIntervalElapsed += HandleIntervalElapsed;
+        timer.OnHighlightedExpired += HandleHighlightExpired;
     }
 
     void OnDisable()
     {
         buttonController.OnButtonClicked -= HandleButtonClicked;
-        timerController.OnIntervalElapsed -= HandleIntervalElapsed;
-        timerController.OnHighlightedExpired -= HandleHighlightExpired;
+        timer.OnIntervalElapsed -= HandleIntervalElapsed;
+        timer.OnHighlightedExpired -= HandleHighlightExpired;
     }
 }
