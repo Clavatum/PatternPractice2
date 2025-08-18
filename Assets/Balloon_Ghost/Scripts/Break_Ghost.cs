@@ -1,9 +1,12 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
 public class Break_Ghost : MonoBehaviour
 {
+    public event Action OnBalloonPopped;
+
     public bool Is_Breaked = false;
     public GameObject ghost_normal;
     public GameObject ghost_Parts;
@@ -19,12 +22,12 @@ public class Break_Ghost : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-        if(Is_Breaked == true)
+        if (Is_Breaked == true)
         {
             ghost_Parts.SetActive(true);
             ghost_normal.SetActive(false);
         }
-        
+
     }
     public void break_Ghost()
     {
@@ -33,7 +36,7 @@ public class Break_Ghost : MonoBehaviour
     public void play_anim()
     {
         counter += 1;
-        if(counter == 2)
+        if (counter == 2)
         {
             counter = 0;
             ghost.Play("idle");
@@ -42,5 +45,20 @@ public class Break_Ghost : MonoBehaviour
         {
             ghost.Play("attack");
         }
+    }
+
+    public void TriggerOnBalloonPoppedEvent()
+    {
+        OnBalloonPopped?.Invoke();
+    }
+
+    void OnEnable()
+    {
+        OnBalloonPopped += break_Ghost;
+    }
+
+    void OnDisable()
+    {
+        OnBalloonPopped -= break_Ghost;
     }
 }

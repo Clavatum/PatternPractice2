@@ -6,9 +6,11 @@ public class Mediator : MonoBehaviour
     [SerializeField] private ButtonController buttonController;
     [SerializeField] private TransformChanger transformChanger;
     [SerializeField] private Timer timer;
+    [SerializeField] private Break_Ghost breakGhost;
 
     private Button currentHighlightedButton;
     private bool isHighlightActive;
+    private bool isOperationsNeedsToBeStopped = false;
 
     void Start()
     {
@@ -17,6 +19,7 @@ public class Mediator : MonoBehaviour
 
     private void HandleIntervalElapsed()
     {
+        if (isOperationsNeedsToBeStopped) return;
         currentHighlightedButton = buttonController.GetRandomButton();
         isHighlightActive = true;
         buttonController.SetButtonHighlight(currentHighlightedButton, true);
@@ -25,6 +28,7 @@ public class Mediator : MonoBehaviour
 
     private void HandleButtonClicked(Button clickedButton)
     {
+        if (isOperationsNeedsToBeStopped) return;
         if (isHighlightActive)
         {
             if (clickedButton == currentHighlightedButton)
@@ -57,12 +61,25 @@ public class Mediator : MonoBehaviour
 
     private void HandleHighlightExpired()
     {
+        if (isOperationsNeedsToBeStopped) return;
         if (isHighlightActive)
         {
             OnFailTooLate();
             transformChanger.TriggerTransformChangedEvent(true);
         }
         EndRoundAndQueueNext();
+    }
+
+    private void HandleBalloonPopped()
+    {
+        isOperationsNeedsToBeStopped = true;
+        breakGhost.TriggerOnBalloonPoppedEvent();
+        //trigger feedback and sound events and end game
+    }
+
+    private void HandleBallonReachedMinSize()
+    {
+        //trigger feedback and sound events
     }
 
     private void OnFailTooLate()
@@ -85,6 +102,8 @@ public class Mediator : MonoBehaviour
         buttonController.OnButtonClicked += HandleButtonClicked;
         timer.OnIntervalElapsed += HandleIntervalElapsed;
         timer.OnHighlightedExpired += HandleHighlightExpired;
+        transformChanger.OnBalloonReachedMaxSize += HandleBalloonPopped;
+        transformChanger.OnBalloonReachedMinSize += HandleBallonReachedMinSize;
     }
 
     void OnDisable()
@@ -92,5 +111,7 @@ public class Mediator : MonoBehaviour
         buttonController.OnButtonClicked -= HandleButtonClicked;
         timer.OnIntervalElapsed -= HandleIntervalElapsed;
         timer.OnHighlightedExpired -= HandleHighlightExpired;
+        transformChanger.OnBalloonReachedMaxSize -= HandleBalloonPopped;
+        transformChanger.OnBalloonReachedMinSize -= HandleBallonReachedMinSize;
     }
 }

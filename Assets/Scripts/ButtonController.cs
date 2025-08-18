@@ -33,7 +33,6 @@ public class ButtonController : MonoBehaviour
 
     private void HandleClick(Button clickedButton)
     {
-        Debug.Log($"{clickedButton.name} clicked!");
         OnButtonClicked?.Invoke(clickedButton);
     }
 

@@ -1,6 +1,8 @@
 using System;
 using System.Collections;
+using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.XR;
 
 public class Timer : MonoBehaviour
 {
@@ -28,13 +30,13 @@ public class Timer : MonoBehaviour
         highlightCoroutine = StartCoroutine(Call(highlightDuration, OnHighlightedExpired));
     }
 
-    public void StopInterval()
+    private void StopInterval()
     {
         if (intervalCoroutine != null) StopCoroutine(intervalCoroutine);
         intervalCoroutine = null;
     }
 
-    public void StopHighlight()
+    private void StopHighlight()
     {
         if (highlightCoroutine != null) StopCoroutine(highlightCoroutine);
         highlightCoroutine = null;
