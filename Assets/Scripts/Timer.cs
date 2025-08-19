@@ -1,8 +1,6 @@
 using System;
 using System.Collections;
-using NUnit.Framework;
 using UnityEngine;
-using UnityEngine.XR;
 
 public class Timer : MonoBehaviour
 {

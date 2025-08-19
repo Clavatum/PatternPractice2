@@ -7,10 +7,14 @@ public class Mediator : MonoBehaviour
     [SerializeField] private TransformChanger transformChanger;
     [SerializeField] private Timer timer;
     [SerializeField] private Break_Ghost breakGhost;
+    [SerializeField] private InGameStatsUI inGameStatsUI;
+    [SerializeField] private GameStatsManager gameStatsManager;
+    [SerializeField] private AudioSystem audioSystem;
+    [SerializeField] private GameManager gameManager;
 
     private Button currentHighlightedButton;
     private bool isHighlightActive;
-    private bool isOperationsNeedsToBeStopped = false;
+    private bool isGameEnd = false;
 
     void Start()
     {
@@ -19,7 +23,7 @@ public class Mediator : MonoBehaviour
 
     private void HandleIntervalElapsed()
     {
-        if (isOperationsNeedsToBeStopped) return;
+        if (isGameEnd) return;
         currentHighlightedButton = buttonController.GetRandomButton();
         isHighlightActive = true;
         buttonController.SetButtonHighlight(currentHighlightedButton, true);
@@ -28,18 +32,24 @@ public class Mediator : MonoBehaviour
 
     private void HandleButtonClicked(Button clickedButton)
     {
-        if (isOperationsNeedsToBeStopped) return;
+        if (isGameEnd) return;
         if (isHighlightActive)
         {
             if (clickedButton == currentHighlightedButton)
             {
                 OnSuccessWhileHighlighted();
+                audioSystem.TriggerBalloonInflatedEvent(false, false);
                 transformChanger.TriggerTransformChangedEvent(false);
+                gameStatsManager.TriggerUpdateCounterEvent(true);
+                inGameStatsUI.TriggerUpdateCounterTextEvent(gameStatsManager.SuccessfulClickCount, true);
             }
             else
             {
                 OnFailWrongButton();
+                audioSystem.TriggerBalloonInflatedEvent(false, true);
                 transformChanger.TriggerTransformChangedEvent(true);
+                gameStatsManager.TriggerUpdateCounterEvent(false);
+                inGameStatsUI.TriggerUpdateCounterTextEvent(gameStatsManager.FailedClickCount, false);
             }
             EndRoundAndQueueNext();
             return;
@@ -47,6 +57,33 @@ public class Mediator : MonoBehaviour
         transformChanger.TriggerTransformChangedEvent(true);
         OnFailTooLate();
         EndRoundAndQueueNext();
+    }
+
+    private void HandleHighlightExpired()
+    {
+        if (isGameEnd) return;
+        if (isHighlightActive)
+        {
+            OnFailTooLate();
+            audioSystem.TriggerBalloonInflatedEvent(false, true);
+            transformChanger.TriggerTransformChangedEvent(true);
+            gameStatsManager.TriggerUpdateCounterEvent(false);
+            inGameStatsUI.TriggerUpdateCounterTextEvent(gameStatsManager.FailedClickCount, false);
+        }
+        EndRoundAndQueueNext();
+    }
+
+    private void HandleBalloonPopped()
+    {
+        isGameEnd = true;
+        audioSystem.TriggerBalloonInflatedEvent(true, false);
+        breakGhost.TriggerOnBalloonPoppedEvent();
+        gameManager.TriggerGameEnd();
+    }
+
+    private void HandleBallonReachedMinSize()
+    {
+        Debug.Log("Balloon reached minimum size");
     }
 
     private void EndRoundAndQueueNext()
@@ -57,29 +94,6 @@ public class Mediator : MonoBehaviour
 
         timer.StopAllTimers();
         timer.StartInterval();
-    }
-
-    private void HandleHighlightExpired()
-    {
-        if (isOperationsNeedsToBeStopped) return;
-        if (isHighlightActive)
-        {
-            OnFailTooLate();
-            transformChanger.TriggerTransformChangedEvent(true);
-        }
-        EndRoundAndQueueNext();
-    }
-
-    private void HandleBalloonPopped()
-    {
-        isOperationsNeedsToBeStopped = true;
-        breakGhost.TriggerOnBalloonPoppedEvent();
-        //trigger feedback and sound events and end game
-    }
-
-    private void HandleBallonReachedMinSize()
-    {
-        //trigger feedback and sound events
     }
 
     private void OnFailTooLate()
