@@ -9,12 +9,12 @@ public class MainMenuManager : MonoBehaviour
 
     private void PlayOffline()
     {
-        SceneManager.LoadScene(1);
+        SceneManager.LoadScene("SinglePlayerGameScene");
     }
 
     private void PlayOnline()
     {
-        SceneManager.LoadScene(2);
+        SceneManager.LoadScene("MultiplayerMenu");
     }
 
     void OnEnable()

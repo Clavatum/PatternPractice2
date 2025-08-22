@@ -11,7 +11,8 @@ using UnityEngine.UI;
 public class MultiplayerMenuManager : MonoBehaviour
 {
     [SerializeField] private TMP_InputField nickNameInputField;
-    [SerializeField] private TMP_InputField JoinCodeInputField;
+    [SerializeField] private TMP_InputField joinCodeInputField;
+    [SerializeField] private TMP_InputField maxPlayersInputField;
     [SerializeField] private Button createRoomButton;
     [SerializeField] private Button joinRoomButton;
 
@@ -19,25 +20,23 @@ public class MultiplayerMenuManager : MonoBehaviour
 
     void Awake()
     {
-        createRoomButton.onClick.AddListener(CrateRoom);
+        createRoomButton.onClick.AddListener(CreateRoom);
         joinRoomButton.onClick.AddListener(JoinRoom);
     }
 
     async void Start()
     {
         await UnityServices.InitializeAsync();
-        OnSignIn();
-    }
-
-    private async void OnSignIn()
-    {
         await AuthenticationService.Instance.SignInAnonymouslyAsync();
     }
 
-    private async void CrateRoom()
+    private async void CreateRoom()
     {
-        var allocation = await RelayService.Instance.CreateAllocationAsync(2);
+        int maxPlayers = 4;
+        if (int.TryParse(maxPlayersInputField.text, out int parsed))
+            maxPlayers = Mathf.Clamp(parsed, 2, 8);
 
+        var allocation = await RelayService.Instance.CreateAllocationAsync(maxPlayers);
         RoomCode = await RelayService.Instance.GetJoinCodeAsync(allocation.AllocationId);
 
         var unityTransport = NetworkManager.Singleton.GetComponent<UnityTransport>();
@@ -50,15 +49,14 @@ public class MultiplayerMenuManager : MonoBehaviour
         );
 
         NetworkManager.Singleton.StartHost();
-
-        SceneManager.LoadScene("Room");
+        NetworkManager.Singleton.SceneManager.LoadScene("Room", LoadSceneMode.Single);
     }
 
     private async void JoinRoom()
     {
         try
         {
-            var joinAllocation = await RelayService.Instance.JoinAllocationAsync(JoinCodeInputField.text);
+            var joinAllocation = await RelayService.Instance.JoinAllocationAsync(joinCodeInputField.text);
 
             var unityTransport = NetworkManager.Singleton.GetComponent<UnityTransport>();
             unityTransport.SetRelayServerData(
@@ -71,8 +69,6 @@ public class MultiplayerMenuManager : MonoBehaviour
             );
 
             NetworkManager.Singleton.StartClient();
-
-            SceneManager.LoadScene("Room");
         }
         catch (RelayServiceException ex)
         {
