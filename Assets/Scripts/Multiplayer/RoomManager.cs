@@ -12,13 +12,7 @@ public class RoomManager : MonoBehaviour
 
     void Awake()
     {
-        startGameButton.onClick.AddListener(() =>
-            {
-                if (NetworkManager.Singleton.IsHost)
-                {
-                    NetworkManager.Singleton.SceneManager.LoadScene("MultiplayerGameScene", LoadSceneMode.Single);
-                }
-            });
+        startGameButton.onClick.AddListener(StartGame);
     }
 
     void Start()
@@ -37,6 +31,14 @@ public class RoomManager : MonoBehaviour
         NetworkManager.Singleton.OnClientDisconnectCallback += OnClientDisconnected;
     }
 
+    private void StartGame()
+    {
+        if (NetworkManager.Singleton.IsHost)
+        {
+            NetworkManager.Singleton.SceneManager.LoadScene("MultiplayerGameScene", LoadSceneMode.Single);
+        }
+    }
+
     private void OnClientConnected(ulong clientId)
     {
         Debug.Log($"Client {clientId} joined the room.");
@@ -53,5 +55,6 @@ public class RoomManager : MonoBehaviour
         if (NetworkManager.Singleton == null) return;
         NetworkManager.Singleton.OnClientConnectedCallback -= OnClientConnected;
         NetworkManager.Singleton.OnClientDisconnectCallback -= OnClientDisconnected;
+        startGameButton.onClick.RemoveAllListeners();
     }
 }

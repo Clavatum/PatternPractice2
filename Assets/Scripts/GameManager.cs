@@ -13,7 +13,7 @@ public class GameManager : MonoBehaviour
 
     void Awake()
     {
-        playAgainButton.onClick.AddListener(() => SetScene(1));
+        playAgainButton.onClick.AddListener(PlayAgain);
     }
 
     private void SetGameEndPanel()
@@ -21,9 +21,9 @@ public class GameManager : MonoBehaviour
         gameEndPanel.SetActive(true);
     }
 
-    private void SetScene(int index)
+    private void PlayAgain()
     {
-        SceneManager.LoadScene(index);
+        SceneManager.LoadScene("SinglePlayerGameScene");
     }
 
     public void TriggerGameEnd() => OnGameEnd?.Invoke();
