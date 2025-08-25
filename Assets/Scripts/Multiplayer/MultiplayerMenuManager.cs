@@ -1,9 +1,11 @@
+using System;
 using TMPro;
 using Unity.Netcode;
 using Unity.Netcode.Transports.UTP;
 using Unity.Services.Authentication;
 using Unity.Services.Core;
 using Unity.Services.Relay;
+using Unity.Services.Relay.Models;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
@@ -15,6 +17,9 @@ public class MultiplayerMenuManager : MonoBehaviour
     [SerializeField] private TMP_InputField maxPlayersInputField;
     [SerializeField] private Button createRoomButton;
     [SerializeField] private Button joinRoomButton;
+
+    private RelayHostData hostData;
+    private RelayJoinData joinData;
 
     public static string RoomCode { get; private set; }
 
@@ -36,39 +41,71 @@ public class MultiplayerMenuManager : MonoBehaviour
         if (int.TryParse(maxPlayersInputField.text, out int parsed))
             maxPlayers = Mathf.Clamp(parsed, 2, 8);
 
-        var allocation = await RelayService.Instance.CreateAllocationAsync(maxPlayers);
+        Allocation allocation = await RelayService.Instance.CreateAllocationAsync(maxPlayers);
         RoomCode = await RelayService.Instance.GetJoinCodeAsync(allocation.AllocationId);
 
-        var unityTransport = NetworkManager.Singleton.GetComponent<UnityTransport>();
-        unityTransport.SetRelayServerData(
-            allocation.RelayServer.IpV4,
-            (ushort)allocation.RelayServer.Port,
-            allocation.AllocationIdBytes,
-            allocation.Key,
-            allocation.ConnectionData
+        hostData = new RelayHostData()
+        {
+            IPv4Address = allocation.RelayServer.IpV4,
+            Port = (ushort)allocation.RelayServer.Port,
+
+            AllocationID = allocation.AllocationId,
+            AllocationIDBytes = allocation.AllocationIdBytes,
+            ConnectionData = allocation.ConnectionData,
+            Key = allocation.Key,
+        };
+
+        var transport = NetworkManager.Singleton.GetComponent<UnityTransport>();
+        transport.SetRelayServerData(
+            hostData.IPv4Address,
+            hostData.Port,
+            hostData.AllocationIDBytes,
+            hostData.Key,
+            hostData.ConnectionData
         );
 
-        NetworkManager.Singleton.StartHost();
-        NetworkManager.Singleton.SceneManager.LoadScene("Room", LoadSceneMode.Single);
+        if (NetworkManager.Singleton.StartHost())
+        {
+            NetworkManager.Singleton.SceneManager.LoadScene("Room", LoadSceneMode.Single);
+        }
+        else
+        {
+            Debug.LogError("Failed to start host!");
+        }
     }
 
     private async void JoinRoom()
     {
         try
         {
-            var joinAllocation = await RelayService.Instance.JoinAllocationAsync(joinCodeInputField.text);
+            JoinAllocation joinAllocation = await RelayService.Instance.JoinAllocationAsync(joinCodeInputField.text);
 
-            var unityTransport = NetworkManager.Singleton.GetComponent<UnityTransport>();
-            unityTransport.SetRelayServerData(
-                joinAllocation.RelayServer.IpV4,
-                (ushort)joinAllocation.RelayServer.Port,
-                joinAllocation.AllocationIdBytes,
-                joinAllocation.Key,
-                joinAllocation.ConnectionData,
-                joinAllocation.HostConnectionData
+            joinData = new RelayJoinData()
+            {
+                IPv4Address = joinAllocation.RelayServer.IpV4,
+                Port = (ushort)joinAllocation.RelayServer.Port,
+
+                AllocationID = joinAllocation.AllocationId,
+                AllocationIDBytes = joinAllocation.AllocationIdBytes,
+                ConnectionData = joinAllocation.ConnectionData,
+                HostConnectionData = joinAllocation.HostConnectionData,
+                Key = joinAllocation.Key,
+            };
+
+            var transport = NetworkManager.Singleton.GetComponent<UnityTransport>();
+            transport.SetRelayServerData(
+                joinData.IPv4Address,
+                joinData.Port,
+                joinData.AllocationIDBytes,
+                joinData.Key,
+                joinData.ConnectionData,
+                joinData.HostConnectionData
             );
 
-            NetworkManager.Singleton.StartClient();
+            if (!NetworkManager.Singleton.StartClient())
+            {
+                Debug.LogError("Failed to start client!");
+            }
         }
         catch (RelayServiceException ex)
         {
@@ -81,4 +118,26 @@ public class MultiplayerMenuManager : MonoBehaviour
         createRoomButton.onClick.RemoveAllListeners();
         joinRoomButton.onClick.RemoveAllListeners();
     }
+}
+
+public struct RelayHostData
+{
+    public string joinCode;
+    public string IPv4Address;
+    public ushort Port;
+    public Guid AllocationID;
+    public byte[] AllocationIDBytes;
+    public byte[] ConnectionData;
+    public byte[] Key;
+}
+
+public struct RelayJoinData
+{
+    public string IPv4Address;
+    public ushort Port;
+    public Guid AllocationID;
+    public byte[] AllocationIDBytes;
+    public byte[] ConnectionData;
+    public byte[] HostConnectionData;
+    public byte[] Key;
 }
