@@ -15,6 +15,7 @@ public class MultiplayerMenuManager : MonoBehaviour
     [SerializeField] private TMP_InputField nickNameInputField;
     [SerializeField] private TMP_InputField joinCodeInputField;
     [SerializeField] private TMP_InputField maxPlayersInputField;
+    [SerializeField] private TextMeshProUGUI feedbackText;
     [SerializeField] private Button createRoomButton;
     [SerializeField] private Button joinRoomButton;
 
@@ -22,6 +23,9 @@ public class MultiplayerMenuManager : MonoBehaviour
     private RelayJoinData joinData;
 
     public static string RoomCode { get; private set; }
+    public static string PlayerNickname { get; private set; }
+    public static int MaxPlayers { get; private set; }
+    public static bool GameStarted { get; set; } = false;
 
     void Awake()
     {
@@ -37,9 +41,16 @@ public class MultiplayerMenuManager : MonoBehaviour
 
     private async void CreateRoom()
     {
-        int maxPlayers = 4;
-        if (int.TryParse(maxPlayersInputField.text, out int parsed))
-            maxPlayers = Mathf.Clamp(parsed, 2, 8);
+        PlayerNickname = string.IsNullOrWhiteSpace(nickNameInputField.text)
+        ? "Host"
+        : nickNameInputField.text;
+
+        int maxPlayers = int.Parse(maxPlayersInputField.text);
+        if (maxPlayers > 4) { maxPlayers = 4; }
+        if (maxPlayers < 1) { maxPlayers = 1; }
+
+        MaxPlayers = maxPlayers;
+        GameStarted = false;
 
         Allocation allocation = await RelayService.Instance.CreateAllocationAsync(maxPlayers);
         RoomCode = await RelayService.Instance.GetJoinCodeAsync(allocation.AllocationId);
@@ -72,10 +83,28 @@ public class MultiplayerMenuManager : MonoBehaviour
         {
             Debug.LogError("Failed to start host!");
         }
+        Debug.Log(NetworkManager.Singleton.ConnectedClients.Count);
+        Debug.Log(maxPlayers);
+        Debug.Log(MaxPlayers);
     }
 
     private async void JoinRoom()
     {
+        if (NetworkManager.Singleton.ConnectedClients.Count == MaxPlayers)
+        {
+            feedbackText.text = "The room is full";
+            return;
+        }
+        if (GameStarted)
+        {
+            feedbackText.text = "The game is started, you can't join";
+            return;
+        }
+
+        PlayerNickname = string.IsNullOrWhiteSpace(nickNameInputField.text)
+        ? "Client"
+        : nickNameInputField.text;
+
         try
         {
             JoinAllocation joinAllocation = await RelayService.Instance.JoinAllocationAsync(joinCodeInputField.text);

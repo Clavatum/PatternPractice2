@@ -10,9 +10,10 @@ public class RoomManager : NetworkBehaviour
     [SerializeField] private TextMeshProUGUI roomCodeText;
     [SerializeField] private TextMeshProUGUI connectionStatusText;
     [SerializeField] private TextMeshProUGUI feedbackText;
+    [SerializeField] private TextMeshProUGUI playerCountText;
     [SerializeField] private Button startGameButton;
 
-    void Awake()
+    private void Awake()
     {
         startGameButton.onClick.AddListener(StartGame);
     }
@@ -32,9 +33,11 @@ public class RoomManager : NetworkBehaviour
         NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
         NetworkManager.Singleton.OnClientDisconnectCallback += OnClientDisconnected;
 
+        UpdatePlayerCount();
+
         if (IsHost)
         {
-            AppendFeedback("Room created. Waiting for players...\n");
+            AppendFeedback($"{MultiplayerMenuManager.PlayerNickname} created the room. Waiting for players...\n");
         }
     }
 
@@ -42,6 +45,7 @@ public class RoomManager : NetworkBehaviour
     {
         if (IsHost)
         {
+            MultiplayerMenuManager.GameStarted = true;
             NetworkManager.Singleton.SceneManager.LoadScene("MultiplayerGameScene", LoadSceneMode.Single);
         }
     }
@@ -50,50 +54,46 @@ public class RoomManager : NetworkBehaviour
     {
         if (!IsServer) return;
 
-        string message;
         if (clientId == NetworkManager.Singleton.LocalClientId)
-        {
-            message = "Room created. Waiting for players...\n";
-            AppendFeedback(message);
             return;
-        }
-        else
+
+        string nickname = PlayerInfo.GetNickname(clientId);
+        string msg = $"{nickname} joined the room.\n";
+
+        AppendFeedback(msg);
+
+        var rpcParams = new ClientRpcParams
         {
-            message = $"Client {clientId} joined the room.\n";
-
-            AppendFeedback(message);
-
-            var rpcParameters = new ClientRpcParams
+            Send = new ClientRpcSendParams
             {
-                Send = new ClientRpcSendParams
-                {
-                    TargetClientIds = NetworkManager.Singleton.ConnectedClientsIds
-                        .Where(id => id != NetworkManager.Singleton.LocalClientId && id != clientId)
-                        .ToArray()
-                }
-            };
+                TargetClientIds = NetworkManager.Singleton.ConnectedClientsIds
+                    .Where(id => id != NetworkManager.Singleton.LocalClientId && id != clientId)
+                    .ToArray()
+            }
+        };
+        UpdateFeedbackClientRpc(msg, rpcParams);
 
-            UpdateFeedbackClientRpc(message, rpcParameters);
-
-            UpdatePersonalFeedbackClientRpc("You joined the room.\n", new ClientRpcParams
+        UpdatePersonalFeedbackClientRpc("You joined the room.\n", new ClientRpcParams
+        {
+            Send = new ClientRpcSendParams
             {
-                Send = new ClientRpcSendParams
-                {
-                    TargetClientIds = new[] { clientId }
-                }
-            });
-        }
+                TargetClientIds = new[] { clientId }
+            }
+        });
+
+        UpdatePlayerCount();
     }
 
     private void OnClientDisconnected(ulong clientId)
     {
         if (!IsServer) return;
 
-        string message = $"Client {clientId} left the room.\n";
+        string nickname = PlayerInfo.GetNickname(clientId);
+        string msg = $"{nickname} left the room.\n";
 
-        AppendFeedback(message);
+        AppendFeedback(msg);
 
-        var rpcParameters = new ClientRpcParams
+        var rpcParams = new ClientRpcParams
         {
             Send = new ClientRpcSendParams
             {
@@ -102,18 +102,19 @@ public class RoomManager : NetworkBehaviour
                     .ToArray()
             }
         };
+        UpdateFeedbackClientRpc(msg, rpcParams);
 
-        UpdateFeedbackClientRpc(message, rpcParameters);
+        UpdatePlayerCount();
     }
 
     [ClientRpc]
-    private void UpdateFeedbackClientRpc(string message, ClientRpcParams rpcParameters = default)
+    private void UpdateFeedbackClientRpc(string message, ClientRpcParams rpcParams = default)
     {
         AppendFeedback(message);
     }
 
     [ClientRpc]
-    private void UpdatePersonalFeedbackClientRpc(string message, ClientRpcParams rpcParameters = default)
+    private void UpdatePersonalFeedbackClientRpc(string message, ClientRpcParams rpcParams = default)
     {
         AppendFeedback(message);
     }
@@ -123,11 +124,20 @@ public class RoomManager : NetworkBehaviour
         feedbackText.text += message;
     }
 
+    private void UpdatePlayerCount()
+    {
+        int current = NetworkManager.Singleton.ConnectedClientsIds.Count;
+        int max = MultiplayerMenuManager.MaxPlayers;
+        playerCountText.text = $"Players: {current}/{max}";
+    }
+
     private void OnDestroy()
     {
-        if (NetworkManager.Singleton == null) return;
-        NetworkManager.Singleton.OnClientConnectedCallback -= OnClientConnected;
-        NetworkManager.Singleton.OnClientDisconnectCallback -= OnClientDisconnected;
+        if (NetworkManager.Singleton != null)
+        {
+            NetworkManager.Singleton.OnClientConnectedCallback -= OnClientConnected;
+            NetworkManager.Singleton.OnClientDisconnectCallback -= OnClientDisconnected;
+        }
         startGameButton.onClick.RemoveAllListeners();
     }
 }
