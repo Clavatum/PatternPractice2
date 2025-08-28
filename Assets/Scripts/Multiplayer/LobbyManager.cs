@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using TMPro;
 using Unity.Services.Authentication;
@@ -51,6 +52,8 @@ public class LobbyManager : MonoBehaviour
         Lobby lobby = await LobbyService.Instance.CreateLobbyAsync(lobbyName, maxPlayers, createLobbyOptions);
         DontDestroyOnLoad(this);
         Debug.Log("Lobby crated");
+
+        StartCoroutine(HeartbeatLobby(lobby.Id, 15f));
     }
 
     private async void BrowseLobbies()
@@ -89,6 +92,16 @@ public class LobbyManager : MonoBehaviour
         catch (LobbyServiceException ex)
         {
             Debug.Log(ex);
+        }
+    }
+
+    private IEnumerator HeartbeatLobby(string lobbyID, float interval)
+    {
+        var delay = new WaitForSeconds(interval);
+        while (true)
+        {
+            LobbyService.Instance.SendHeartbeatPingAsync(lobbyID);
+            yield return delay;
         }
     }
 
