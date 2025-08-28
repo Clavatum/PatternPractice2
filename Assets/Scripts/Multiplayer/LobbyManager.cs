@@ -12,11 +12,15 @@ using UnityEngine.UI;
 public class LobbyManager : MonoBehaviour
 {
     [SerializeField] private TextMeshProUGUI feedbackText;
+    [SerializeField] private TextMeshProUGUI lobbyCodeText;
     [SerializeField] private TMP_InputField lobbyNameInputField;
+    [SerializeField] private TMP_InputField lobbyCodeInputField;
     [SerializeField] private TMP_Dropdown maxPlayersDropdown;
     [SerializeField] private Toggle isLobbyPrivate;
     [SerializeField] private Button createLobbyButton;
     [SerializeField] private Button browseLobbiesButton;
+    [SerializeField] private Button joinLobbyButton;
+    [SerializeField] private Button closeLobbyButton;
     [SerializeField] private Button openCreateLobbyPanelButton;
     [SerializeField] private Button closeCreateLobbyPanelButton;
     [SerializeField] private Button openLobbyBrowserPanelButton;
@@ -24,9 +28,13 @@ public class LobbyManager : MonoBehaviour
     [SerializeField] private GameObject createLobbyPanel;
     [SerializeField] private GameObject lobbyBrowserPanel;
 
+    private Lobby currentLobby;
+
     void Awake()
     {
         createLobbyButton.onClick.AddListener(CreateLobby);
+        joinLobbyButton.onClick.AddListener(JoinLobbyWithCode);
+        closeLobbyButton.onClick.AddListener(CloseLobby);
         browseLobbiesButton.onClick.AddListener(BrowseLobbies);
         openCreateLobbyPanelButton.onClick.AddListener(OpenCreateLobbyPanel);
         openLobbyBrowserPanelButton.onClick.AddListener(OpenLobbyBrowserPanel);
@@ -49,11 +57,49 @@ public class LobbyManager : MonoBehaviour
             IsPrivate = isLobbyPrivate.isOn
         };
 
-        Lobby lobby = await LobbyService.Instance.CreateLobbyAsync(lobbyName, maxPlayers, createLobbyOptions);
+        currentLobby = await LobbyService.Instance.CreateLobbyAsync(lobbyName, maxPlayers, createLobbyOptions);
         DontDestroyOnLoad(this);
         Debug.Log("Lobby crated");
+        CloseCreateLobbyPanel();
+        lobbyCodeText.text = $"Lobby Code: {currentLobby.LobbyCode}";
 
-        StartCoroutine(HeartbeatLobby(lobby.Id, 15f));
+        closeLobbyButton.gameObject.SetActive(true);
+        browseLobbiesButton.gameObject.SetActive(false);
+        joinLobbyButton.gameObject.SetActive(false);
+        lobbyCodeInputField.gameObject.SetActive(false);
+
+        StartCoroutine(HeartbeatLobby(currentLobby.Id, 15f));
+    }
+
+    private async void JoinLobbyWithCode()
+    {
+        var code = lobbyCodeInputField.text;
+        try
+        {
+            await LobbyService.Instance.JoinLobbyByCodeAsync(code);
+
+            browseLobbiesButton.gameObject.SetActive(false);
+            openCreateLobbyPanelButton.gameObject.SetActive(false);
+            lobbyCodeInputField.gameObject.SetActive(false);
+            joinLobbyButton.gameObject.SetActive(false);
+
+            Debug.Log("joined a lobby with code");
+        }
+        catch (LobbyServiceException ex)
+        {
+            Debug.LogError(ex.Message);
+        }
+    }
+
+    private async void CloseLobby()
+    {
+        Debug.Log("Lobby closed");
+        await LobbyService.Instance.DeleteLobbyAsync(currentLobby.Id);
+        lobbyCodeText.text = "";
+        closeLobbyButton.gameObject.SetActive(false);
+        browseLobbiesButton.gameObject.SetActive(true);
+        joinLobbyButton.gameObject.SetActive(true);
+        lobbyCodeInputField.gameObject.SetActive(true);
     }
 
     private async void BrowseLobbies()
@@ -91,7 +137,7 @@ public class LobbyManager : MonoBehaviour
         }
         catch (LobbyServiceException ex)
         {
-            Debug.Log(ex);
+            Debug.LogError(ex.Message);
         }
     }
 
@@ -130,6 +176,8 @@ public class LobbyManager : MonoBehaviour
     void OnDestroy()
     {
         createLobbyButton.onClick.RemoveAllListeners();
+        joinLobbyButton.onClick.RemoveAllListeners();
+        closeLobbyButton.onClick.RemoveAllListeners();
         browseLobbiesButton.onClick.RemoveAllListeners();
         openCreateLobbyPanelButton.onClick.RemoveAllListeners();
         openLobbyBrowserPanelButton.onClick.RemoveAllListeners();
