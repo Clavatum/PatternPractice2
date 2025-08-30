@@ -29,6 +29,8 @@ public class LobbyManager : MonoBehaviour
     [SerializeField] private Button closeLobbyBrowserPanelButton;
     [SerializeField] private GameObject createLobbyPanel;
     [SerializeField] private GameObject lobbyBrowserPanel;
+    [SerializeField] private GameObject lobbyButtonContainer;
+    [SerializeField] private GameObject lobbyThumbnailButton;
 
     private Lobby currentLobby;
     private Coroutine heartbeatCoroutine;
@@ -72,6 +74,7 @@ public class LobbyManager : MonoBehaviour
         DontDestroyOnLoad(this);
 
         Debug.Log("Lobby crated");
+        InvokeRepeating(nameof(UpdateLobby), 0f, 1.5f);
         CloseCreateLobbyPanel();
         lobbyCodeText.text = $"Lobby Code: {currentLobby.LobbyCode}";
 
@@ -83,6 +86,50 @@ public class LobbyManager : MonoBehaviour
         lobbyCodeInputField.gameObject.SetActive(false);
 
         StartHeartbeat(currentLobby.Id, 15f);
+    }
+
+    private void CreateLobbyButtonContainer(Lobby lobby)
+    {
+        var button = Instantiate(lobbyThumbnailButton, Vector3.zero, Quaternion.identity);
+        button.GetComponentInChildren<TextMeshProUGUI>().text = lobby.Name;
+        var recTransform = button.GetComponent<RectTransform>();
+        recTransform.SetParent(lobbyButtonContainer.transform);
+        button.GetComponent<Button>().onClick.AddListener(delegate () { JoinLobbyWithID(lobby); });
+    }
+
+    private async void JoinLobbyWithID(Lobby lobby)
+    {
+        try
+        {
+            JoinLobbyByIdOptions joinLobbyByIdOptions = new()
+            {
+                Player = new Player(AuthenticationService.Instance.PlayerId)
+                {
+                    Data = new Dictionary<string, PlayerDataObject>()
+                    {
+                        {"Nickname", new PlayerDataObject(PlayerDataObject.VisibilityOptions.Public, nicknameInputField.text) }
+                    }
+                }
+            };
+
+            currentLobby = await LobbyService.Instance.JoinLobbyByIdAsync(lobby.Id, joinLobbyByIdOptions);
+            InvokeRepeating(nameof(UpdateLobby), 0f, 1.5f);
+
+            LogPlayersInLobby(lobby);
+            lobbyBrowserPanel.SetActive(false);
+            closeLobbyBrowserPanelButton.gameObject.SetActive(false);
+            nicknameInputField.gameObject.SetActive(false);
+            browseLobbiesButton.gameObject.SetActive(false);
+            openCreateLobbyPanelButton.gameObject.SetActive(false);
+            lobbyCodeInputField.gameObject.SetActive(false);
+            joinLobbyButton.gameObject.SetActive(false);
+
+            Debug.Log("joined a lobby with code");
+        }
+        catch (LobbyServiceException ex)
+        {
+            Debug.LogError(ex.Message);
+        }
     }
 
     private async void JoinLobbyWithCode()
@@ -101,8 +148,10 @@ public class LobbyManager : MonoBehaviour
                 }
             };
 
-            Lobby lobby = await LobbyService.Instance.JoinLobbyByCodeAsync(code, joinLobbyByCodeOptions);
-            LogPlayersInLobby(lobby);
+            currentLobby = await LobbyService.Instance.JoinLobbyByCodeAsync(code, joinLobbyByCodeOptions);
+            InvokeRepeating(nameof(UpdateLobby), 0f, 1.5f);
+
+            LogPlayersInLobby(currentLobby);
 
             nicknameInputField.gameObject.SetActive(false);
             browseLobbiesButton.gameObject.SetActive(false);
@@ -125,6 +174,7 @@ public class LobbyManager : MonoBehaviour
         try
         {
             await LobbyService.Instance.DeleteLobbyAsync(currentLobby.Id);
+            CancelInvoke(nameof(UpdateLobby));
 
             Debug.Log("Lobby deleted by host");
 
@@ -147,8 +197,22 @@ public class LobbyManager : MonoBehaviour
         currentLobby = null;
     }
 
+    private async void UpdateLobby()
+    {
+        currentLobby = await LobbyService.Instance.GetLobbyAsync(currentLobby.Id);
+        LogPlayersInLobby(currentLobby);
+    }
+
     private async void BrowseLobbies()
     {
+        if (lobbyButtonContainer != null && lobbyButtonContainer.transform.childCount > 0)
+        {
+            foreach (Transform transform in lobbyButtonContainer.transform)
+            {
+                Destroy(transform.gameObject);
+            }
+        }
+
         try
         {
             QueryLobbiesOptions queryLobbiesOptions = new()
@@ -178,6 +242,7 @@ public class LobbyManager : MonoBehaviour
             foreach (Lobby foundLobby in lobbies.Results)
             {
                 Debug.Log($"Lobby Name: {foundLobby.Name}\n");
+                CreateLobbyButtonContainer(foundLobby);
             }
         }
         catch (LobbyServiceException ex)
@@ -189,6 +254,7 @@ public class LobbyManager : MonoBehaviour
     private void LogPlayersInLobby(Lobby lobby)
     {
         playerListText.text = "\tPlayers\n";
+        if (lobby.Players.Count == 0) { return; }
         foreach (Player player in lobby.Players)
         {
             playerListText.text += $"{player.Data["Nickname"].Value}\n";
@@ -239,6 +305,7 @@ public class LobbyManager : MonoBehaviour
     private void CloseLobbyBrowserPanel()
     {
         lobbyBrowserPanel.SetActive(false);
+        feedbackText.text = "";
         closeLobbyBrowserPanelButton.gameObject.SetActive(false);
     }
 
