@@ -7,6 +7,7 @@ using Unity.Services.Core;
 using Unity.Services.Lobbies;
 using Unity.Services.Lobbies.Models;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 public class LobbyManager : MonoBehaviour
@@ -27,18 +28,23 @@ public class LobbyManager : MonoBehaviour
     [SerializeField] private Button closeCreateLobbyPanelButton;
     [SerializeField] private Button openLobbyBrowserPanelButton;
     [SerializeField] private Button closeLobbyBrowserPanelButton;
+    [SerializeField] private Button leaveRoomButton;
+    [SerializeField] private GameObject playerCard;
     [SerializeField] private GameObject createLobbyPanel;
     [SerializeField] private GameObject lobbyBrowserPanel;
+    [SerializeField] private GameObject playerCardContainer;
     [SerializeField] private GameObject lobbyButtonContainer;
     [SerializeField] private GameObject lobbyThumbnailButton;
 
     private Lobby currentLobby;
     private Coroutine heartbeatCoroutine;
+    private string playerId;
 
     void Awake()
     {
         createLobbyButton.onClick.AddListener(CreateLobby);
         joinLobbyButton.onClick.AddListener(JoinLobbyWithCode);
+        leaveRoomButton.onClick.AddListener(LeaveRoom);
         closeLobbyButton.onClick.AddListener(CloseLobby);
         browseLobbiesButton.onClick.AddListener(BrowseLobbies);
         openCreateLobbyPanelButton.onClick.AddListener(OpenCreateLobbyPanel);
@@ -51,6 +57,7 @@ public class LobbyManager : MonoBehaviour
     {
         await UnityServices.InitializeAsync();
         await AuthenticationService.Instance.SignInAnonymouslyAsync();
+        playerId = AuthenticationService.Instance.PlayerId;
     }
 
     private async void CreateLobby()
@@ -78,23 +85,10 @@ public class LobbyManager : MonoBehaviour
         CloseCreateLobbyPanel();
         lobbyCodeText.text = $"Lobby Code: {currentLobby.LobbyCode}";
 
-        nicknameInputField.gameObject.SetActive(false);
-        openCreateLobbyPanelButton.gameObject.SetActive(false);
         closeLobbyButton.gameObject.SetActive(true);
-        browseLobbiesButton.gameObject.SetActive(false);
-        joinLobbyButton.gameObject.SetActive(false);
-        lobbyCodeInputField.gameObject.SetActive(false);
+        SetInLobbyUIActive();
 
         StartHeartbeat(currentLobby.Id, 15f);
-    }
-
-    private void CreateLobbyButtonContainer(Lobby lobby)
-    {
-        var button = Instantiate(lobbyThumbnailButton, Vector3.zero, Quaternion.identity);
-        button.GetComponentInChildren<TextMeshProUGUI>().text = lobby.Name;
-        var recTransform = button.GetComponent<RectTransform>();
-        recTransform.SetParent(lobbyButtonContainer.transform);
-        button.GetComponent<Button>().onClick.AddListener(delegate () { JoinLobbyWithID(lobby); });
     }
 
     private async void JoinLobbyWithID(Lobby lobby)
@@ -118,12 +112,7 @@ public class LobbyManager : MonoBehaviour
             LogPlayersInLobby(lobby);
             lobbyBrowserPanel.SetActive(false);
             closeLobbyBrowserPanelButton.gameObject.SetActive(false);
-            nicknameInputField.gameObject.SetActive(false);
-            browseLobbiesButton.gameObject.SetActive(false);
-            openCreateLobbyPanelButton.gameObject.SetActive(false);
-            lobbyCodeInputField.gameObject.SetActive(false);
-            joinLobbyButton.gameObject.SetActive(false);
-
+            SetInLobbyUIActive();
             Debug.Log("joined a lobby with code");
         }
         catch (LobbyServiceException ex)
@@ -149,16 +138,10 @@ public class LobbyManager : MonoBehaviour
             };
 
             currentLobby = await LobbyService.Instance.JoinLobbyByCodeAsync(code, joinLobbyByCodeOptions);
-            InvokeRepeating(nameof(UpdateLobby), 0f, 1.5f);
+            InvokeRepeating(nameof(UpdateLobby), 0f, 0.5f);
 
             LogPlayersInLobby(currentLobby);
-
-            nicknameInputField.gameObject.SetActive(false);
-            browseLobbiesButton.gameObject.SetActive(false);
-            openCreateLobbyPanelButton.gameObject.SetActive(false);
-            lobbyCodeInputField.gameObject.SetActive(false);
-            joinLobbyButton.gameObject.SetActive(false);
-
+            SetInLobbyUIActive();
             Debug.Log("joined a lobby with code");
         }
         catch (LobbyServiceException ex)
@@ -179,15 +162,7 @@ public class LobbyManager : MonoBehaviour
             Debug.Log("Lobby deleted by host");
 
             StopHeartbeat();
-
-            lobbyCodeText.text = "";
-            playerListText.text = "";
-            nicknameInputField.gameObject.SetActive(true);
-            openCreateLobbyPanelButton.gameObject.SetActive(true);
-            closeLobbyButton.gameObject.SetActive(false);
-            browseLobbiesButton.gameObject.SetActive(true);
-            joinLobbyButton.gameObject.SetActive(true);
-            lobbyCodeInputField.gameObject.SetActive(true);
+            SetLobbyMenuUIActive();
         }
         catch (LobbyServiceException ex)
         {
@@ -199,8 +174,57 @@ public class LobbyManager : MonoBehaviour
 
     private async void UpdateLobby()
     {
+        if (!IsInLobby())
+        {
+            SetLobbyMenuUIActive();
+            return;
+        }
+
         currentLobby = await LobbyService.Instance.GetLobbyAsync(currentLobby.Id);
         LogPlayersInLobby(currentLobby);
+    }
+
+    private bool IsInLobby()
+    {
+        if (currentLobby == null) return false;
+        foreach (Player player in currentLobby.Players)
+        {
+            if (player.Id == playerId)
+            {
+                return true;
+            }
+        }
+        currentLobby = null;
+        return false;
+    }
+
+    private async void LeaveRoom()
+    {
+        if (currentLobby == null) return;
+        try
+        {
+            await LobbyService.Instance.RemovePlayerAsync(currentLobby.Id, playerId);
+            CancelInvoke(nameof(UpdateLobby));
+            SetLobbyMenuUIActive();
+            currentLobby = null;
+            Debug.Log("You left the room");
+        }
+        catch (LobbyServiceException ex)
+        {
+            Debug.LogException(ex);
+        }
+    }
+
+    private async void KickPlayer(string playerId)
+    {
+        try
+        {
+            await LobbyService.Instance.RemovePlayerAsync(currentLobby.Id, playerId);
+        }
+        catch (LobbyServiceException ex)
+        {
+            Debug.LogException(ex);
+        }
     }
 
     private async void BrowseLobbies()
@@ -251,13 +275,38 @@ public class LobbyManager : MonoBehaviour
         }
     }
 
+    private void CreateLobbyButtonContainer(Lobby lobby)
+    {
+        var button = Instantiate(lobbyThumbnailButton, Vector3.zero, Quaternion.identity);
+        button.GetComponentInChildren<TextMeshProUGUI>().text = lobby.Name;
+        var recTransform = button.GetComponent<RectTransform>();
+        recTransform.SetParent(lobbyButtonContainer.transform);
+        button.GetComponent<Button>().onClick.AddListener(delegate () { JoinLobbyWithID(lobby); });
+    }
+
     private void LogPlayersInLobby(Lobby lobby)
     {
-        playerListText.text = "\tPlayers\n";
+        if (playerCardContainer != null && playerCardContainer.transform.childCount > 0)
+        {
+            foreach (Transform transform in playerCardContainer.transform)
+            {
+                Destroy(transform.gameObject);
+            }
+        }
+
         if (lobby.Players.Count == 0) { return; }
         foreach (Player player in lobby.Players)
         {
-            playerListText.text += $"{player.Data["Nickname"].Value}\n";
+            GameObject card = Instantiate(playerCard, Vector3.zero, Quaternion.identity);
+            var recTransform = card.GetComponent<RectTransform>();
+            recTransform.SetParent(playerCardContainer.transform);
+            Button kickButton = card.GetComponentInChildren<Button>();
+            card.GetComponentInChildren<TextMeshProUGUI>().text = player.Data["Nickname"].Value;
+            if ((player.Id == currentLobby.HostId) || player.Id == playerId)
+            {
+                kickButton.gameObject.SetActive(false);
+            }
+            kickButton.onClick.AddListener(delegate { KickPlayer(player.Id); });
         }
     }
 
@@ -284,6 +333,43 @@ public class LobbyManager : MonoBehaviour
             StopCoroutine(heartbeatCoroutine);
             heartbeatCoroutine = null;
         }
+    }
+
+    private bool IsHost()
+    {
+        if (currentLobby != null && currentLobby.HostId == playerId)
+        {
+            return true;
+        }
+        return false;
+    }
+
+    private void SetLobbyMenuUIActive()
+    {
+        lobbyCodeText.text = "";
+        feedbackText.text = "";
+        playerListText.gameObject.SetActive(false);
+        leaveRoomButton.gameObject.SetActive(false);
+        playerCardContainer.SetActive(false);
+        nicknameInputField.gameObject.SetActive(true);
+        openCreateLobbyPanelButton.gameObject.SetActive(true);
+        closeLobbyButton.gameObject.SetActive(false);
+        browseLobbiesButton.gameObject.SetActive(true);
+        joinLobbyButton.gameObject.SetActive(true);
+        lobbyCodeInputField.gameObject.SetActive(true);
+    }
+
+    private void SetInLobbyUIActive()
+    {
+        if (!IsHost())
+            leaveRoomButton.gameObject.SetActive(true);
+        playerListText.gameObject.SetActive(true);
+        playerCardContainer.gameObject.SetActive(true);
+        nicknameInputField.gameObject.SetActive(false);
+        browseLobbiesButton.gameObject.SetActive(false);
+        openCreateLobbyPanelButton.gameObject.SetActive(false);
+        lobbyCodeInputField.gameObject.SetActive(false);
+        joinLobbyButton.gameObject.SetActive(false);
     }
 
     private void OpenCreateLobbyPanel()
@@ -314,6 +400,7 @@ public class LobbyManager : MonoBehaviour
         createLobbyButton.onClick.RemoveAllListeners();
         joinLobbyButton.onClick.RemoveAllListeners();
         closeLobbyButton.onClick.RemoveAllListeners();
+        leaveRoomButton.onClick.RemoveAllListeners();
         browseLobbiesButton.onClick.RemoveAllListeners();
         openCreateLobbyPanelButton.onClick.RemoveAllListeners();
         openLobbyBrowserPanelButton.onClick.RemoveAllListeners();
