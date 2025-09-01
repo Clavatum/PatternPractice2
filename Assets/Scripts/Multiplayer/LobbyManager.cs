@@ -15,6 +15,7 @@ public class LobbyManager : MonoBehaviour
     [SerializeField] private TextMeshProUGUI feedbackText;
     [SerializeField] private TextMeshProUGUI lobbyCodeText;
     [SerializeField] private TextMeshProUGUI playerListText;
+    [SerializeField] private TextMeshProUGUI playerCountText;
     [SerializeField] private TMP_InputField lobbyNameInputField;
     [SerializeField] private TMP_InputField lobbyCodeInputField;
     [SerializeField] private TMP_InputField nicknameInputField;
@@ -108,16 +109,14 @@ public class LobbyManager : MonoBehaviour
 
             currentLobby = await LobbyService.Instance.JoinLobbyByIdAsync(lobby.Id, joinLobbyByIdOptions);
             InvokeRepeating(nameof(UpdateLobby), 0f, 1.5f);
-
             LogPlayersInLobby(lobby);
             lobbyBrowserPanel.SetActive(false);
             closeLobbyBrowserPanelButton.gameObject.SetActive(false);
             SetInLobbyUIActive();
-            Debug.Log("joined a lobby with code");
         }
         catch (LobbyServiceException ex)
         {
-            Debug.LogError(ex.Message);
+            feedbackText.text = ex.Message;
         }
     }
 
@@ -138,7 +137,7 @@ public class LobbyManager : MonoBehaviour
             };
 
             currentLobby = await LobbyService.Instance.JoinLobbyByCodeAsync(code, joinLobbyByCodeOptions);
-            InvokeRepeating(nameof(UpdateLobby), 0f, 0.5f);
+            InvokeRepeating(nameof(UpdateLobby), 0f, 1.5f);
 
             LogPlayersInLobby(currentLobby);
             SetInLobbyUIActive();
@@ -146,7 +145,7 @@ public class LobbyManager : MonoBehaviour
         }
         catch (LobbyServiceException ex)
         {
-            Debug.LogError(ex.Message);
+            feedbackText.text = ex.Message;
         }
     }
 
@@ -157,31 +156,38 @@ public class LobbyManager : MonoBehaviour
         try
         {
             await LobbyService.Instance.DeleteLobbyAsync(currentLobby.Id);
+            currentLobby = null;
             CancelInvoke(nameof(UpdateLobby));
-
-            Debug.Log("Lobby deleted by host");
-
             StopHeartbeat();
             SetLobbyMenuUIActive();
         }
         catch (LobbyServiceException ex)
         {
-            Debug.LogError($"CloseLobby error: {ex.Reason} - {ex.Message}");
+            feedbackText.text = ex.Message;
         }
-
-        currentLobby = null;
     }
 
     private async void UpdateLobby()
     {
-        if (!IsInLobby())
+        if (currentLobby == null || !IsInLobby())
         {
+            CancelInvoke(nameof(UpdateLobby));
             SetLobbyMenuUIActive();
             return;
         }
 
-        currentLobby = await LobbyService.Instance.GetLobbyAsync(currentLobby.Id);
-        LogPlayersInLobby(currentLobby);
+        try
+        {
+            currentLobby = await LobbyService.Instance.GetLobbyAsync(currentLobby.Id);
+            LogPlayersInLobby(currentLobby);
+        }
+        catch (LobbyServiceException ex)
+        {
+            feedbackText.text = ex.Message;
+            currentLobby = null;
+            CancelInvoke(nameof(UpdateLobby));
+            SetLobbyMenuUIActive();
+        }
     }
 
     private bool IsInLobby()
@@ -211,7 +217,7 @@ public class LobbyManager : MonoBehaviour
         }
         catch (LobbyServiceException ex)
         {
-            Debug.LogException(ex);
+            feedbackText.text = ex.Message;
         }
     }
 
@@ -271,7 +277,7 @@ public class LobbyManager : MonoBehaviour
         }
         catch (LobbyServiceException ex)
         {
-            Debug.LogError(ex.Message);
+            feedbackText.text = ex.Message;
         }
     }
 
@@ -281,6 +287,7 @@ public class LobbyManager : MonoBehaviour
         button.GetComponentInChildren<TextMeshProUGUI>().text = lobby.Name;
         var recTransform = button.GetComponent<RectTransform>();
         recTransform.SetParent(lobbyButtonContainer.transform);
+        button.GetComponent<Button>().onClick.RemoveAllListeners();
         button.GetComponent<Button>().onClick.AddListener(delegate () { JoinLobbyWithID(lobby); });
     }
 
@@ -293,6 +300,7 @@ public class LobbyManager : MonoBehaviour
                 Destroy(transform.gameObject);
             }
         }
+        playerCountText.text = $"{lobby.Players.Count}/{lobby.MaxPlayers}";
 
         if (lobby.Players.Count == 0) { return; }
         foreach (Player player in lobby.Players)
@@ -348,6 +356,7 @@ public class LobbyManager : MonoBehaviour
     {
         lobbyCodeText.text = "";
         feedbackText.text = "";
+        playerCountText.text = "";
         playerListText.gameObject.SetActive(false);
         leaveRoomButton.gameObject.SetActive(false);
         playerCardContainer.SetActive(false);
@@ -364,7 +373,7 @@ public class LobbyManager : MonoBehaviour
         if (!IsHost())
             leaveRoomButton.gameObject.SetActive(true);
         playerListText.gameObject.SetActive(true);
-        playerCardContainer.gameObject.SetActive(true);
+        playerCardContainer.SetActive(true);
         nicknameInputField.gameObject.SetActive(false);
         browseLobbiesButton.gameObject.SetActive(false);
         openCreateLobbyPanelButton.gameObject.SetActive(false);
