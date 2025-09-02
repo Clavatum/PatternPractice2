@@ -2,12 +2,17 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using TMPro;
+using Unity.Netcode;
+using Unity.Netcode.Transports.UTP;
 using Unity.Services.Authentication;
 using Unity.Services.Core;
 using Unity.Services.Lobbies;
 using Unity.Services.Lobbies.Models;
+using Unity.Services.Relay;
+using Unity.Services.Relay.Models;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 public class LobbyManager : MonoBehaviour
@@ -30,6 +35,7 @@ public class LobbyManager : MonoBehaviour
     [SerializeField] private Button openLobbyBrowserPanelButton;
     [SerializeField] private Button closeLobbyBrowserPanelButton;
     [SerializeField] private Button leaveRoomButton;
+    [SerializeField] private Button startGameButton;
     [SerializeField] private GameObject playerCardPrefab;
     [SerializeField] private GameObject createLobbyPanel;
     [SerializeField] private GameObject lobbyBrowserPanel;
@@ -38,8 +44,12 @@ public class LobbyManager : MonoBehaviour
     [SerializeField] private GameObject lobbyThumbnailButton;
 
     private Lobby currentLobby;
+    private Allocation allocation;
     private Coroutine heartbeatCoroutine;
     private string playerId;
+
+    private RelayHostData hostData;
+    private RelayJoinData joinData;
 
     void Awake()
     {
@@ -47,6 +57,7 @@ public class LobbyManager : MonoBehaviour
         joinLobbyButton.onClick.AddListener(JoinLobbyWithCode);
         leaveRoomButton.onClick.AddListener(LeaveRoom);
         closeLobbyButton.onClick.AddListener(CloseLobby);
+        startGameButton.onClick.AddListener(StartGame);
         browseLobbiesButton.onClick.AddListener(BrowseLobbies);
         openCreateLobbyPanelButton.onClick.AddListener(OpenCreateLobbyPanel);
         openLobbyBrowserPanelButton.onClick.AddListener(OpenLobbyBrowserPanel);
@@ -69,12 +80,17 @@ public class LobbyManager : MonoBehaviour
         CreateLobbyOptions createLobbyOptions = new()
         {
             IsPrivate = isLobbyPrivate.isOn,
-            Player = new Player(AuthenticationService.Instance.PlayerId)
+            Player = new Player(AuthenticationService.Instance.PlayerId),
+            Data = new Dictionary<string, DataObject>
+            {
+                { "IsGameStarted", new DataObject(DataObject.VisibilityOptions.Member, "false") },{"RoomCode", new DataObject(DataObject.VisibilityOptions.Member, null)}
+            }
         };
 
         createLobbyOptions.Player.Data = new Dictionary<string, PlayerDataObject>()
         {
-            {"Nickname", new PlayerDataObject(PlayerDataObject.VisibilityOptions.Public, nicknameInputField.text) }
+            {"Nickname", new PlayerDataObject(PlayerDataObject.VisibilityOptions.Public, nicknameInputField.text)
+            }
         };
 
         currentLobby = await LobbyService.Instance.CreateLobbyAsync(lobbyName, maxPlayers, createLobbyOptions);
@@ -155,6 +171,7 @@ public class LobbyManager : MonoBehaviour
         {
             await LobbyService.Instance.DeleteLobbyAsync(currentLobby.Id);
             currentLobby = null;
+            allocation = null;
             CancelInvoke(nameof(UpdateLobby));
             StopHeartbeat();
             SetLobbyMenuUIActive();
@@ -178,11 +195,41 @@ public class LobbyManager : MonoBehaviour
         {
             currentLobby = await LobbyService.Instance.GetLobbyAsync(currentLobby.Id);
             LogPlayersInLobby(currentLobby);
+
+            if (!IsHost() && IsGameStarted())
+            {
+                JoinAllocation joinAllocation = await RelayService.Instance.JoinAllocationAsync(currentLobby.Data["RoomCode"].Value);
+
+                joinData = new RelayJoinData()
+                {
+                    IPv4Address = joinAllocation.RelayServer.IpV4,
+                    Port = (ushort)joinAllocation.RelayServer.Port,
+
+                    AllocationID = joinAllocation.AllocationId,
+                    AllocationIDBytes = joinAllocation.AllocationIdBytes,
+                    ConnectionData = joinAllocation.ConnectionData,
+                    HostConnectionData = joinAllocation.HostConnectionData,
+                    Key = joinAllocation.Key,
+                };
+
+                var transport = NetworkManager.Singleton.GetComponent<UnityTransport>();
+                transport.SetRelayServerData(
+                    joinData.IPv4Address,
+                    joinData.Port,
+                    joinData.AllocationIDBytes,
+                    joinData.Key,
+                    joinData.ConnectionData,
+                    joinData.HostConnectionData
+                );
+
+                NetworkManager.Singleton.StartClient();
+            }
         }
         catch (LobbyServiceException ex)
         {
             feedbackText.text = ex.Message;
             currentLobby = null;
+            allocation = null;
             CancelInvoke(nameof(UpdateLobby));
             SetLobbyMenuUIActive();
         }
@@ -199,6 +246,7 @@ public class LobbyManager : MonoBehaviour
             }
         }
         currentLobby = null;
+        allocation = null;
         return false;
     }
 
@@ -211,6 +259,7 @@ public class LobbyManager : MonoBehaviour
             CancelInvoke(nameof(UpdateLobby));
             SetLobbyMenuUIActive();
             currentLobby = null;
+            allocation = null;
         }
         catch (LobbyServiceException ex)
         {
@@ -289,6 +338,7 @@ public class LobbyManager : MonoBehaviour
 
     private void LogPlayersInLobby(Lobby lobby)
     {
+        if (IsGameStarted()) return;
         if (playerCardContainer != null && playerCardContainer.transform.childCount > 0)
         {
             foreach (Transform transform in playerCardContainer.transform)
@@ -348,6 +398,61 @@ public class LobbyManager : MonoBehaviour
         return false;
     }
 
+    private async void StartGame()
+    {
+        if (currentLobby == null || !IsHost()) return;
+        try
+        {
+            int maxPlayers = Convert.ToInt32(maxPlayersDropdown.options[maxPlayersDropdown.value].text);
+            allocation = await RelayService.Instance.CreateAllocationAsync(maxPlayers);
+            string RoomCode = await RelayService.Instance.GetJoinCodeAsync(allocation.AllocationId);
+
+            hostData = new RelayHostData()
+            {
+                IPv4Address = allocation.RelayServer.IpV4,
+                Port = (ushort)allocation.RelayServer.Port,
+
+                AllocationID = allocation.AllocationId,
+                AllocationIDBytes = allocation.AllocationIdBytes,
+                ConnectionData = allocation.ConnectionData,
+                Key = allocation.Key,
+            };
+
+            var transport = NetworkManager.Singleton.GetComponent<UnityTransport>();
+            transport.SetRelayServerData(
+                hostData.IPv4Address,
+                hostData.Port,
+                hostData.AllocationIDBytes,
+                hostData.Key,
+                hostData.ConnectionData
+            );
+            NetworkManager.Singleton.StartHost();
+
+            UpdateLobbyOptions updateLobbyOptions = new()
+            {
+                Data = new Dictionary<string, DataObject>
+            {
+                {"IsGameStarted", new DataObject(DataObject.VisibilityOptions.Member, "true")},
+                { "RoomCode", new DataObject(DataObject.VisibilityOptions.Member, RoomCode)}
+            }
+            };
+            currentLobby = await LobbyService.Instance.UpdateLobbyAsync(currentLobby.Id, updateLobbyOptions);
+
+            NetworkManager.Singleton.SceneManager.LoadScene("MultiplayerGameScene", LoadSceneMode.Single);
+        }
+        catch (LobbyServiceException ex)
+        {
+            feedbackText.text = ex.Message;
+        }
+    }
+
+    private bool IsGameStarted()
+    {
+        if (currentLobby == null) return false;
+        if (currentLobby.Data["IsGameStarted"].Value == "true") return true;
+        return false;
+    }
+
     private void SetLobbyMenuUIActive()
     {
         lobbyCodeText.text = "";
@@ -359,6 +464,7 @@ public class LobbyManager : MonoBehaviour
         nicknameInputField.gameObject.SetActive(true);
         openCreateLobbyPanelButton.gameObject.SetActive(true);
         closeLobbyButton.gameObject.SetActive(false);
+        startGameButton.gameObject.SetActive(false);
         browseLobbiesButton.gameObject.SetActive(true);
         joinLobbyButton.gameObject.SetActive(true);
         lobbyCodeInputField.gameObject.SetActive(true);
@@ -368,6 +474,9 @@ public class LobbyManager : MonoBehaviour
     {
         if (!IsHost())
             leaveRoomButton.gameObject.SetActive(true);
+        if (IsHost())
+            startGameButton.gameObject.SetActive(true);
+
         playerListText.gameObject.SetActive(true);
         playerCardContainer.SetActive(true);
         nicknameInputField.gameObject.SetActive(false);
@@ -405,11 +514,34 @@ public class LobbyManager : MonoBehaviour
         createLobbyButton.onClick.RemoveAllListeners();
         joinLobbyButton.onClick.RemoveAllListeners();
         closeLobbyButton.onClick.RemoveAllListeners();
+        startGameButton.onClick.RemoveAllListeners();
         leaveRoomButton.onClick.RemoveAllListeners();
         browseLobbiesButton.onClick.RemoveAllListeners();
         openCreateLobbyPanelButton.onClick.RemoveAllListeners();
         openLobbyBrowserPanelButton.onClick.RemoveAllListeners();
         closeCreateLobbyPanelButton.onClick.RemoveAllListeners();
         closeLobbyBrowserPanelButton.onClick.RemoveAllListeners();
+    }
+
+    public struct RelayHostData
+    {
+        public string joinCode;
+        public string IPv4Address;
+        public ushort Port;
+        public Guid AllocationID;
+        public byte[] AllocationIDBytes;
+        public byte[] ConnectionData;
+        public byte[] Key;
+    }
+
+    public struct RelayJoinData
+    {
+        public string IPv4Address;
+        public ushort Port;
+        public Guid AllocationID;
+        public byte[] AllocationIDBytes;
+        public byte[] ConnectionData;
+        public byte[] HostConnectionData;
+        public byte[] Key;
     }
 }
