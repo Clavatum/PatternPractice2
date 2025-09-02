@@ -30,7 +30,7 @@ public class LobbyManager : MonoBehaviour
     [SerializeField] private Button openLobbyBrowserPanelButton;
     [SerializeField] private Button closeLobbyBrowserPanelButton;
     [SerializeField] private Button leaveRoomButton;
-    [SerializeField] private GameObject playerCard;
+    [SerializeField] private GameObject playerCardPrefab;
     [SerializeField] private GameObject createLobbyPanel;
     [SerializeField] private GameObject lobbyBrowserPanel;
     [SerializeField] private GameObject playerCardContainer;
@@ -81,7 +81,6 @@ public class LobbyManager : MonoBehaviour
         LogPlayersInLobby(currentLobby);
         DontDestroyOnLoad(this);
 
-        Debug.Log("Lobby crated");
         InvokeRepeating(nameof(UpdateLobby), 0f, 1.5f);
         CloseCreateLobbyPanel();
         lobbyCodeText.text = $"Lobby Code: {currentLobby.LobbyCode}";
@@ -141,7 +140,6 @@ public class LobbyManager : MonoBehaviour
 
             LogPlayersInLobby(currentLobby);
             SetInLobbyUIActive();
-            Debug.Log("joined a lobby with code");
         }
         catch (LobbyServiceException ex)
         {
@@ -213,7 +211,6 @@ public class LobbyManager : MonoBehaviour
             CancelInvoke(nameof(UpdateLobby));
             SetLobbyMenuUIActive();
             currentLobby = null;
-            Debug.Log("You left the room");
         }
         catch (LobbyServiceException ex)
         {
@@ -265,13 +262,12 @@ public class LobbyManager : MonoBehaviour
             QueryResponse lobbies = await LobbyService.Instance.QueryLobbiesAsync(queryLobbiesOptions);
 
             if (lobbies.Results.Count == 0)
-                feedbackText.text = "Couldn't find any lobby";
+                feedbackText.text = "Couldn't find any available lobby";
             else
                 feedbackText.text = $"{lobbies.Results.Count} lobby/lobbies found";
 
             foreach (Lobby foundLobby in lobbies.Results)
             {
-                Debug.Log($"Lobby Name: {foundLobby.Name}\n");
                 CreateLobbyButtonContainer(foundLobby);
             }
         }
@@ -305,7 +301,7 @@ public class LobbyManager : MonoBehaviour
         if (lobby.Players.Count == 0) { return; }
         foreach (Player player in lobby.Players)
         {
-            GameObject card = Instantiate(playerCard, Vector3.zero, Quaternion.identity);
+            GameObject card = Instantiate(playerCardPrefab, Vector3.zero, Quaternion.identity);
             var recTransform = card.GetComponent<RectTransform>();
             recTransform.SetParent(playerCardContainer.transform);
             Button kickButton = card.GetComponentInChildren<Button>();

@@ -10,7 +10,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
-public class MultiplayerMenuManager : MonoBehaviour
+public class RelayManager : MonoBehaviour
 {
     [SerializeField] private TMP_InputField nickNameInputField;
     [SerializeField] private TMP_InputField joinCodeInputField;

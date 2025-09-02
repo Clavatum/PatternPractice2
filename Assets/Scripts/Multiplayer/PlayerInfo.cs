@@ -14,7 +14,7 @@ public class PlayerInfo : NetworkBehaviour
     {
         if (IsOwner)
         {
-            playerName.Value = MultiplayerMenuManager.PlayerNickname;
+            playerName.Value = RelayManager.PlayerNickname;
         }
 
         playerName.OnValueChanged += (oldValue, newValue) =>

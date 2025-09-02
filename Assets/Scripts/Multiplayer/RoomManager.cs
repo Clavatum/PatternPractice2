@@ -24,7 +24,7 @@ public class RoomManager : NetworkBehaviour
             startGameButton.gameObject.SetActive(false);
 
         if (IsHost)
-            roomCodeText.text = $"Room Code: {MultiplayerMenuManager.RoomCode}";
+            roomCodeText.text = $"Room Code: {RelayManager.RoomCode}";
         else
             roomCodeText.gameObject.SetActive(false);
 
@@ -37,7 +37,7 @@ public class RoomManager : NetworkBehaviour
 
         if (IsHost)
         {
-            AppendFeedback($"{MultiplayerMenuManager.PlayerNickname} created the room. Waiting for players...\n");
+            AppendFeedback($"{RelayManager.PlayerNickname} created the room. Waiting for players...\n");
         }
     }
 
@@ -45,7 +45,7 @@ public class RoomManager : NetworkBehaviour
     {
         if (IsHost)
         {
-            MultiplayerMenuManager.GameStarted = true;
+            RelayManager.GameStarted = true;
             NetworkManager.Singleton.SceneManager.LoadScene("MultiplayerGameScene", LoadSceneMode.Single);
         }
     }
@@ -127,7 +127,7 @@ public class RoomManager : NetworkBehaviour
     private void UpdatePlayerCount()
     {
         int current = NetworkManager.Singleton.ConnectedClientsIds.Count;
-        int max = MultiplayerMenuManager.MaxPlayers;
+        int max = RelayManager.MaxPlayers;
         playerCountText.text = $"Players: {current}/{max}";
     }
 
