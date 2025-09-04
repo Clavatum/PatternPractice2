@@ -5,7 +5,7 @@ public class AudioSystem : MonoBehaviour
 {
     public event Action<bool, bool> OnBalloonInflated;
 
-    [SerializeField] private AudioSource audioSource;
+    public AudioSource AudioSource;
     [SerializeField] private AudioClip popBalloonClip;
     [SerializeField] private AudioClip inflateBalloonClip;
     [SerializeField] private AudioClip deflateBalloonClip;
@@ -14,21 +14,21 @@ public class AudioSystem : MonoBehaviour
     {
         if (isBalloonPopped)
         {
-            audioSource.clip = popBalloonClip;
-            audioSource.PlayOneShot(popBalloonClip);
-            audioSource.volume = 1f;
+            AudioSource.clip = popBalloonClip;
+            AudioSource.PlayOneShot(popBalloonClip);
+            AudioSource.volume = 1f;
             return;
         }
-        audioSource.volume = 0.15f;
+        AudioSource.volume = 0.15f;
         if (isBalloonInflated)
         {
-            audioSource.clip = inflateBalloonClip;
-            audioSource.PlayOneShot(inflateBalloonClip);
+            AudioSource.clip = inflateBalloonClip;
+            AudioSource.PlayOneShot(inflateBalloonClip);
         }
         else
         {
-            audioSource.clip = deflateBalloonClip;
-            audioSource.PlayOneShot(deflateBalloonClip);
+            AudioSource.clip = deflateBalloonClip;
+            AudioSource.PlayOneShot(deflateBalloonClip);
         }
     }
 

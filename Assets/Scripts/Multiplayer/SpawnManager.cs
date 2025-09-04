@@ -6,6 +6,8 @@ public class SpawnManager : NetworkBehaviour
     [SerializeField] private Transform[] spawnPoints;
     [SerializeField] private GameObject balloonPrefab;
 
+    public GameObject MyBalloon;
+
     public override void OnNetworkSpawn()
     {
         if (IsServer)
@@ -31,7 +33,8 @@ public class SpawnManager : NetworkBehaviour
         int index = (int)clientId % spawnPoints.Length;
 
         var balloon = Instantiate(balloonPrefab, spawnPoints[index].localPosition, spawnPoints[index].localRotation);
-        balloon.GetComponent<NetworkObject>().SpawnAsPlayerObject(clientId);
+        balloon.GetComponent<NetworkObject>().SpawnWithOwnership(clientId);
+        MyBalloon = balloon;
     }
 
     public override void OnDestroy()
