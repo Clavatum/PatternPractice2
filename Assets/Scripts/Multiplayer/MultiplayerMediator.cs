@@ -1,5 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
+using TMPro;
+using Unity.Collections;
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.UI;
@@ -16,34 +18,62 @@ public class MultiplayerMediator : NetworkBehaviour
     [SerializeField] private GameManager gameManager;
     [SerializeField] private SpawnManager spawnManager;
 
+    [SerializeField] private Button startGameButton;
+    [SerializeField] private TextMeshProUGUI feedbackText;
+
     private Button currentHighlightedButton;
     private int indexOfCurrentHighlightedButton;
     private bool isHighlightActive;
     private bool isGameEnd = false;
 
+    private NetworkVariable<bool> isGameStarted = new(
+        false,
+        writePerm: NetworkVariableWritePermission.Server
+    );
+
     public override void OnNetworkSpawn()
     {
-        if (!IsOwner) return;
+        if (IsHost)
+        {
+            startGameButton.gameObject.SetActive(true);
+            startGameButton.onClick.AddListener(StartGame);
+        }
+        StartCoroutine(AssignReferences());
+    }
+
+    private void StartGame()
+    {
+        isGameStarted.Value = true;
+        StartCoroutine(StartGameCoroutine());
+        startGameButton.gameObject.SetActive(false);
+    }
+
+    private IEnumerator AssignReferences()
+    {
+        yield return new WaitForSeconds(3);
+        if (!IsOwner) yield return null;
         breakGhost = spawnManager.MyBalloon.GetComponent<Break_Ghost>();
         MultiplayerTransformChanger = spawnManager.MyBalloon.GetComponentInChildren<MultiplayerTransformChanger>();
         audioSystem.AudioSource = spawnManager.MyBalloon.GetComponentInChildren<AudioSource>();
-        StartCoroutine(StartGame());
     }
 
-    private IEnumerator StartGame()
+    private IEnumerator StartGameCoroutine()
     {
-        yield return new WaitForSeconds(5f);
         if (!IsOwner) yield return null;
+        feedbackText.text = "Game is starts in 3 seconds";
+        yield return new WaitForSeconds(3f);
         MultiplayerTransformChanger.OnBalloonReachedMaxSize += HandleBalloonPopped;
         MultiplayerTransformChanger.OnBalloonReachedMinSize += HandleBallonReachedMinSize;
         MultiplayerButtonController.OnButtonClicked += HandleButtonClicked;
         timer.OnIntervalElapsed += HandleIntervalElapsed;
         timer.OnHighlightedExpired += HandleHighlightExpired;
         timer.StartInterval();
+        feedbackText.text = "";
     }
 
     private void HandleIntervalElapsed()
     {
+        if (!isGameStarted.Value) return;
         if (!IsServer) return;
         if (isGameEnd) return;
         indexOfCurrentHighlightedButton = MultiplayerButtonController.GetRandomButtonIndex();
@@ -54,6 +84,7 @@ public class MultiplayerMediator : NetworkBehaviour
     [ClientRpc]
     private void HandleIntervalElapsedClientRpc(int indexOfButtonToHighlight)
     {
+        if (!isGameStarted.Value) return;
         List<Button> buttonList = MultiplayerButtonController.GetButtonList();
         Button buttonToHighlight = buttonList[indexOfButtonToHighlight];
         MultiplayerButtonController.SetButtonHighlight(buttonToHighlight, true);
@@ -62,6 +93,7 @@ public class MultiplayerMediator : NetworkBehaviour
 
     private void HandleButtonClicked(Button clickedButton)
     {
+        if (!isGameStarted.Value) return;
         if (isGameEnd) return;
         if (isHighlightActive)
         {
@@ -119,11 +151,17 @@ public class MultiplayerMediator : NetworkBehaviour
     private void EndRoundAndQueueNext()
     {
         isHighlightActive = false;
-        MultiplayerButtonController.ClearHighlight();
+        ClearHighlightClientRpc();
         currentHighlightedButton = null;
 
         timer.StopAllTimers();
         timer.StartInterval();
+    }
+
+    [ClientRpc]
+    private void ClearHighlightClientRpc()
+    {
+        MultiplayerButtonController.ClearHighlight();
     }
 
     private void OnFailTooLate()
