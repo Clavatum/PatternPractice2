@@ -12,7 +12,7 @@ public class MultiplayerButtonController : NetworkBehaviour
     [SerializeField] private List<Button> buttonList = new();
     [SerializeField] private Material lightMaterial;
 
-    void Awake()
+    public override void OnNetworkSpawn()
     {
         buttonList.AddRange(GetComponentsInChildren<Button>());
 
@@ -37,15 +37,11 @@ public class MultiplayerButtonController : NetworkBehaviour
 
     public void SetButtonHighlight(Button buttonToHighlight, bool isHighlighted)
     {
-        if (isHighlighted)
-            Debug.Log($"{buttonToHighlight.name} highlighted");
-
         buttonToHighlight.image.material = isHighlighted ? lightMaterial : null;
     }
 
     public void ClearHighlight()
     {
-        Debug.Log("buttons cleared highlight");
         foreach (var button in buttonList)
         {
             SetButtonHighlight(button, false);

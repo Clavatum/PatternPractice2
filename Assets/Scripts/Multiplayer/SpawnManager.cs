@@ -28,13 +28,13 @@ public class SpawnManager : NetworkBehaviour
 
     private void SpawnBalloonForClient(ulong clientId)
     {
+        if (!IsOwner) return;
         Debug.Log($"Spawning balloon for player {clientId}");
 
         int index = (int)clientId % spawnPoints.Length;
 
         var balloon = Instantiate(balloonPrefab, spawnPoints[index].localPosition, spawnPoints[index].localRotation);
         balloon.GetComponent<NetworkObject>().SpawnWithOwnership(clientId);
-        MyBalloon = balloon;
     }
 
     public override void OnDestroy()
