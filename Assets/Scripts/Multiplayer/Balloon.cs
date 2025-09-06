@@ -3,12 +3,7 @@ using UnityEngine;
 
 public class Balloon : NetworkBehaviour
 {
-    private Camera myCamera;
-
-    private void Awake()
-    {
-        myCamera = GetComponentInChildren<Camera>(true);
-    }
+    [SerializeField] private GameObject myCamera;
 
     public override void OnNetworkSpawn()
     {
@@ -16,15 +11,11 @@ public class Balloon : NetworkBehaviour
         {
             var spawnManager = FindAnyObjectByType<SpawnManager>();
             spawnManager.MyBalloon = gameObject;
-            myCamera.enabled = true;
-            AudioListener listener = myCamera.GetComponent<AudioListener>();
-            if (listener != null) listener.enabled = true;
+            myCamera.SetActive(true);
         }
         else
         {
-            myCamera.enabled = false;
-            AudioListener listener = myCamera.GetComponent<AudioListener>();
-            if (listener != null) listener.enabled = false;
+            myCamera.SetActive(false);
         }
     }
 }

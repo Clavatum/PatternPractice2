@@ -29,8 +29,6 @@ public class MultiplayerButtonController : NetworkBehaviour
 
         if (clickedButton != null)
         {
-            ClearHighlight();
-            SetButtonHighlight(clickedButton, true);
             OnButtonClicked?.Invoke(clickedButton);
         }
     }

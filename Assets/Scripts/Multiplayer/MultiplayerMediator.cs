@@ -14,13 +14,14 @@ public class MultiplayerMediator : NetworkBehaviour
     [SerializeField] private Break_Ghost breakGhost;
     [SerializeField] private InGameStatsUI inGameStatsUI;
     [SerializeField] private GameStatsManager gameStatsManager;
-    [SerializeField] private AudioSystem audioSystem;
+    [SerializeField] private MultiplayerAudioSystem multiplayerAudioSystem;
     [SerializeField] private GameManager gameManager;
     [SerializeField] private SpawnManager spawnManager;
 
     [SerializeField] private Button startGameButton;
     [SerializeField] private TextMeshProUGUI feedbackText;
 
+    private List<Button> buttonList;
     private Button currentHighlightedButton;
     private int indexOfCurrentHighlightedButton;
     private bool isHighlightActive;
@@ -33,6 +34,7 @@ public class MultiplayerMediator : NetworkBehaviour
 
     public override void OnNetworkSpawn()
     {
+        buttonList = MultiplayerButtonController.GetButtonList();
         if (IsHost)
         {
             startGameButton.gameObject.SetActive(true);
@@ -50,32 +52,36 @@ public class MultiplayerMediator : NetworkBehaviour
 
     private IEnumerator AssignReferences()
     {
-        yield return new WaitForSeconds(3);
-        if (!IsOwner) yield return null;
+        while (spawnManager == null)
+            yield return null;
+
+        while (spawnManager.MyBalloon == null)
+            yield return null;
+
+        if (!IsOwner) yield break;
+
         breakGhost = spawnManager.MyBalloon.GetComponent<Break_Ghost>();
         MultiplayerTransformChanger = spawnManager.MyBalloon.GetComponentInChildren<MultiplayerTransformChanger>();
-        audioSystem.AudioSource = spawnManager.MyBalloon.GetComponentInChildren<AudioSource>();
+        multiplayerAudioSystem.AudioSource = spawnManager.MyBalloon.GetComponentInChildren<AudioSource>();
     }
 
     private IEnumerator StartGameCoroutine()
     {
         if (!IsOwner) yield return null;
-        feedbackText.text = "Game is starts in 3 seconds";
-        yield return new WaitForSeconds(3f);
         MultiplayerTransformChanger.OnBalloonReachedMaxSize += HandleBalloonPopped;
         MultiplayerTransformChanger.OnBalloonReachedMinSize += HandleBallonReachedMinSize;
         MultiplayerButtonController.OnButtonClicked += HandleButtonClicked;
         timer.OnIntervalElapsed += HandleIntervalElapsed;
         timer.OnHighlightedExpired += HandleHighlightExpired;
+        feedbackText.text = "Game is starts in 3 seconds";
+        yield return new WaitForSeconds(3f);
         timer.StartInterval();
         feedbackText.text = "";
     }
 
     private void HandleIntervalElapsed()
     {
-        if (!isGameStarted.Value) return;
-        if (!IsServer) return;
-        if (isGameEnd) return;
+        if (isGameEnd || !IsServer || !isGameStarted.Value) return;
         indexOfCurrentHighlightedButton = MultiplayerButtonController.GetRandomButtonIndex();
         isHighlightActive = true;
         HandleIntervalElapsedClientRpc(indexOfCurrentHighlightedButton);
@@ -85,22 +91,27 @@ public class MultiplayerMediator : NetworkBehaviour
     private void HandleIntervalElapsedClientRpc(int indexOfButtonToHighlight)
     {
         if (!isGameStarted.Value) return;
-        List<Button> buttonList = MultiplayerButtonController.GetButtonList();
-        Button buttonToHighlight = buttonList[indexOfButtonToHighlight];
-        MultiplayerButtonController.SetButtonHighlight(buttonToHighlight, true);
+        currentHighlightedButton = buttonList[indexOfButtonToHighlight];
+        MultiplayerButtonController.ClearHighlight();
+        MultiplayerButtonController.SetButtonHighlight(currentHighlightedButton, true);
         timer.StartHighlight();
     }
 
     private void HandleButtonClicked(Button clickedButton)
     {
-        if (!isGameStarted.Value) return;
-        if (isGameEnd) return;
+        if (!IsOwner || isGameEnd || !isGameStarted.Value) return;
+        HandleButtonClickedClientRpc(buttonList.IndexOf(clickedButton));
+    }
+
+    [ClientRpc]
+    private void HandleButtonClickedClientRpc(int indexOfClickedButton)
+    {
         if (isHighlightActive)
         {
-            if (clickedButton == currentHighlightedButton)
+            if (indexOfClickedButton == buttonList.IndexOf(currentHighlightedButton))
             {
                 OnSuccessWhileHighlighted();
-                audioSystem.TriggerBalloonInflatedEvent(false, false);
+                multiplayerAudioSystem.TriggerSound(false, false);
                 MultiplayerTransformChanger.TriggerTransformChangedEvent(false);
                 gameStatsManager.TriggerUpdateCounterEvent(true);
                 inGameStatsUI.TriggerUpdateCounterTextEvent(gameStatsManager.SuccessfulClickCount, true);
@@ -108,7 +119,7 @@ public class MultiplayerMediator : NetworkBehaviour
             else
             {
                 OnFailWrongButton();
-                audioSystem.TriggerBalloonInflatedEvent(false, true);
+                multiplayerAudioSystem.TriggerSound(false, true);
                 MultiplayerTransformChanger.TriggerTransformChangedEvent(true);
                 gameStatsManager.TriggerUpdateCounterEvent(false);
                 inGameStatsUI.TriggerUpdateCounterTextEvent(gameStatsManager.FailedClickCount, false);
@@ -127,7 +138,7 @@ public class MultiplayerMediator : NetworkBehaviour
         if (isHighlightActive)
         {
             OnFailTooLate();
-            audioSystem.TriggerBalloonInflatedEvent(false, true);
+            multiplayerAudioSystem.TriggerSound(false, true);
             MultiplayerTransformChanger.TriggerTransformChangedEvent(true);
             gameStatsManager.TriggerUpdateCounterEvent(false);
             inGameStatsUI.TriggerUpdateCounterTextEvent(gameStatsManager.FailedClickCount, false);
@@ -138,7 +149,7 @@ public class MultiplayerMediator : NetworkBehaviour
     private void HandleBalloonPopped()
     {
         isGameEnd = true;
-        audioSystem.TriggerBalloonInflatedEvent(true, false);
+        multiplayerAudioSystem.TriggerSound(true, false);
         breakGhost.TriggerOnBalloonPoppedEvent();
         gameManager.TriggerGameEnd();
     }
